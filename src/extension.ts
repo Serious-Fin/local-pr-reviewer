@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { GitBranchProvider, GitBranch } from './gitBranches';
+import { ChangedFilesProvider, ChangedFileItem } from './changedFiles';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -29,7 +30,37 @@ export function activate(context: vscode.ExtensionContext) {
     const gitBranchProvider = new GitBranchProvider();
     vscode.window.registerTreeDataProvider('localReviewerBranches', gitBranchProvider);
     vscode.commands.registerCommand('localReviewerBranches.refreshBranches', () => gitBranchProvider.refresh());
-    registerCompareBranchCommand(context, gitBranchProvider);
+
+    const changedFilesProvider = new ChangedFilesProvider(context);
+
+    const changedFilesView = vscode.window.createTreeView('changedFilesView', {
+        treeDataProvider: changedFilesProvider,
+    });
+
+    registerCompareBranchCommand(context, gitBranchProvider, changedFilesProvider);
+
+    context.subscriptions.push(changedFilesView);
+
+    context.subscriptions.push(
+        changedFilesView.onDidChangeCheckboxState(async (e) => {
+            // e.items is an array of [ChangedFileItem, TreeItemCheckboxState] tuples
+            for (const [item, state] of e.items) {
+                await changedFilesProvider.setReviewed(item, state === vscode.TreeItemCheckboxState.Checked);
+            }
+
+            // Optional: surface progress, e.g. in the view's title/description
+            changedFilesView.description = `${changedFilesProvider.reviewedCount()} reviewed`;
+        })
+    );
+
+    // Separate command for actually opening the diff, since clicking now goes here
+    vscode.commands.registerCommand('local-reviewer.openFileDiff', async (item: ChangedFileItem) => {
+        const leftUri = toGitUri(item.change.uri, item.baseBranch);
+        const rightUri = toGitUri(item.change.uri, item.compareBranch);
+        const fileName = vscode.workspace.asRelativePath(item.change.uri);
+
+        await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, `${fileName} (${item.baseBranch} ↔ ${item.compareBranch})`);
+    });
 }
 
 // This method is called when your extension is deactivated
@@ -55,7 +86,7 @@ async function resolveBaseBranch(repo: any): Promise<string> {
 
 export function registerCompareBranchCommand(context: vscode.ExtensionContext, gitBranchProvider: GitBranchProvider) {
     context.subscriptions.push(
-        vscode.commands.registerCommand('localPrReviewer.compareBranch', async (branchName: string) => {
+        vscode.commands.registerCommand('local-reviewer.compareBranch', async (branchName: string) => {
             const repo = gitBranchProvider.getRepo();
             if (!repo) {
                 vscode.window.showErrorMessage('No git repository found');

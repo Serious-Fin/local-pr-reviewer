@@ -28,7 +28,8 @@
           "name": "Branches",
           "icon": "resources/temp-icon.svg",
           "contextualTitle": "Local Reviewer"
-        }
+        },
+        { "id": "changedFilesView", "name": "Changed Files" }
       ]
     },
     "commands": [

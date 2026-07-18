@@ -14,7 +14,7 @@ export class GitBranch extends vscode.TreeItem {
 
         // Fires when the user clicks the item
         this.command = {
-            command: 'localPrReviewer.compareBranch',
+            command: 'local-reviewer.compareBranch',
             title: 'Compare with master',
             arguments: [label],
         };
