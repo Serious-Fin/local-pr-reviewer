@@ -17,7 +17,28 @@
         "command": "local-pr-reviewer.helloWorld",
         "title": "Hello World"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "local-pr-reviewer",
+          "title": "Local Reviewer",
+          "icon": "resources/temp-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "local-pr-reviewer": [
+        {
+          "id": "local-pr-reviewer-deps",
+          "name": "Dependencies"
+        },
+        {
+          "id": "local-pr-reviewer-outline",
+          "name": "Outline"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

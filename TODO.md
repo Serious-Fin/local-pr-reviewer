@@ -11,11 +11,15 @@
 
 ## Extension Roadmap
 
-- [ ] Read through the examples and best practices
-- [ ] Extension should have a separate tab
+- [x] Read through the examples and best practices
+- [x] Extension should have a separate tab
 - [ ] User should be able to choose a branch (dropdown)
 - [ ] Default base branch set as master but user should be able to set it
 - [ ] Choose commits inside the branch to review
 - [ ] See git diff of all the files
 - [ ] Mark files as reviewed
 - [ ] Mark diff as reviewed
+
+## To Improve
+
+- [ ] Make a better extension icon
