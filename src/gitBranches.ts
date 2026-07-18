@@ -11,6 +11,13 @@ export class GitBranch extends vscode.TreeItem {
         this.description = isCurrent ? 'current' : '';
         this.iconPath = new vscode.ThemeIcon(isCurrent ? 'git-branch' : 'circle-outline');
         this.contextValue = 'gitBranch';
+
+        // Fires when the user clicks the item
+        this.command = {
+            command: 'localPrReviewer.compareBranch',
+            title: 'Compare with master',
+            arguments: [label],
+        };
     }
 }
 
@@ -55,6 +62,10 @@ export class GitBranchProvider implements vscode.TreeDataProvider<GitBranch> {
 
         this.attachRepoListener();
         this.refresh();
+    }
+
+    public getRepo(): any {
+        return this.getActiveRepo();
     }
 
     private attachRepoListener(): void {

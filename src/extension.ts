@@ -29,7 +29,101 @@ export function activate(context: vscode.ExtensionContext) {
     const gitBranchProvider = new GitBranchProvider();
     vscode.window.registerTreeDataProvider('localReviewerBranches', gitBranchProvider);
     vscode.commands.registerCommand('localReviewerBranches.refreshBranches', () => gitBranchProvider.refresh());
+    registerCompareBranchCommand(context, gitBranchProvider);
 }
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
+
+// Matches the URI scheme the built-in git extension's content provider
+// uses to serve file contents at a specific ref.
+function toGitUri(uri: vscode.Uri, ref: string): vscode.Uri {
+    return uri.with({
+        scheme: 'git',
+        path: uri.path,
+        query: JSON.stringify({ path: uri.fsPath, ref }),
+    });
+}
+
+async function resolveBaseBranch(repo: any): Promise<string> {
+    const refs = await repo.getRefs({ pattern: 'refs/heads/**' });
+    const names = refs.map((r: any) => r.name);
+    if (names.includes('master')) return 'master';
+    if (names.includes('main')) return 'main';
+    throw new Error('Could not find a master/main branch to diff against');
+}
+
+export function registerCompareBranchCommand(context: vscode.ExtensionContext, gitBranchProvider: GitBranchProvider) {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReviewer.compareBranch', async (branchName: string) => {
+            const repo = gitBranchProvider.getRepo();
+            if (!repo) {
+                vscode.window.showErrorMessage('No git repository found');
+                return;
+            }
+
+            let baseBranch: string;
+            try {
+                baseBranch = await resolveBaseBranch(repo);
+            } catch (err: any) {
+                vscode.window.showErrorMessage(err.message);
+                return;
+            }
+
+            if (branchName === baseBranch) {
+                vscode.window.showInformationMessage(`${branchName} is the base branch`);
+                return;
+            }
+
+            // List of changed files between the two branches
+            const changes = await repo.diffBetween(baseBranch, branchName);
+
+            if (!changes.length) {
+                vscode.window.showInformationMessage(`No differences between ${baseBranch} and ${branchName}`);
+                return;
+            }
+
+            interface ChangedFileItem extends vscode.QuickPickItem {
+                change: any; // the Change object from repo.diffBetween
+            }
+
+            const items: ChangedFileItem[] = changes.map((change: any) => ({
+                label: vscode.workspace.asRelativePath(change.uri),
+                description: statusToLabel(change.status),
+                change,
+            }));
+
+            const picked = await vscode.window.showQuickPick<ChangedFileItem>(items, {
+                placeHolder: `Changed files: ${baseBranch}...${branchName}`,
+            });
+
+            if (!picked) return;
+
+            const { change } = picked; // now properly typed as ChangedFileItem
+            const leftUri = toGitUri(change.uri, baseBranch);
+            const rightUri = toGitUri(change.uri, branchName);
+            const fileName = vscode.workspace.asRelativePath(change.uri);
+
+            await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, `${fileName} (${baseBranch} ↔ ${branchName})`);
+        })
+    );
+}
+
+// Status is a numeric enum from git.d.ts (INDEX_ADDED, MODIFIED, DELETED, etc.)
+function statusToLabel(status: number): string {
+    const map: Record<number, string> = {
+        0: 'Index Modified',
+        1: 'Index Added',
+        2: 'Index Deleted',
+        3: 'Index Renamed',
+        4: 'Index Copied',
+        5: 'Modified',
+        6: 'Deleted',
+        7: 'Untracked',
+        8: 'Ignored',
+        9: 'Intent to Add',
+        10: 'Added by them',
+        // ... full enum is in git.d.ts's `Status`
+    };
+    return map[status] ?? 'Changed';
+}
