@@ -1,107 +1,108 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
 import * as path from 'path';
 
-export class DepNodeProvider implements vscode.TreeDataProvider<Dependency> {
-
-	private _onDidChangeTreeData: vscode.EventEmitter<Dependency | undefined | void> = new vscode.EventEmitter<Dependency | undefined | void>();
-	readonly onDidChangeTreeData: vscode.Event<Dependency | undefined | void> = this._onDidChangeTreeData.event;
-
-	constructor(
-		private readonly context: vscode.ExtensionContext,
-		private readonly workspaceRoot: string | undefined
-	) { }
-
-	refresh(): void {
-		this._onDidChangeTreeData.fire();
-	}
-
-	getTreeItem(element: Dependency): vscode.TreeItem {
-		return element;
-	}
-
-	getChildren(element?: Dependency): Thenable<Dependency[]> {
-		if (!this.workspaceRoot) {
-			vscode.window.showInformationMessage('No dependency in empty workspace');
-			return Promise.resolve([]);
-		}
-
-		if (element) {
-			return Promise.resolve(this.getDepsInPackageJson(path.join(this.workspaceRoot, 'node_modules', element.label, 'package.json')));
-		} else {
-			const packageJsonPath = path.join(this.workspaceRoot, 'package.json');
-			if (this.pathExists(packageJsonPath)) {
-				return Promise.resolve(this.getDepsInPackageJson(packageJsonPath));
-			} else {
-				vscode.window.showInformationMessage('Workspace has no package.json');
-				return Promise.resolve([]);
-			}
-		}
-
-	}
-
-	/**
-	 * Given the path to package.json, read all its dependencies and devDependencies.
-	 */
-	private getDepsInPackageJson(packageJsonPath: string): Dependency[] {
-		const workspaceRoot = this.workspaceRoot;
-		if (this.pathExists(packageJsonPath) && workspaceRoot) {
-			const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-
-			const toDep = (moduleName: string, version: string): Dependency => {
-				if (this.pathExists(path.join(workspaceRoot, 'node_modules', moduleName))) {
-					return new Dependency(this.context.extensionUri, moduleName, version, vscode.TreeItemCollapsibleState.Collapsed);
-				} else {
-					return new Dependency(this.context.extensionUri, moduleName, version, vscode.TreeItemCollapsibleState.None, {
-						command: 'extension.openPackageOnNpm',
-						title: '',
-						arguments: [moduleName]
-					});
-				}
-			};
-
-			const deps = packageJson.dependencies
-				? Object.keys(packageJson.dependencies).map(dep => toDep(dep, packageJson.dependencies[dep]))
-				: [];
-			const devDeps = packageJson.devDependencies
-				? Object.keys(packageJson.devDependencies).map(dep => toDep(dep, packageJson.devDependencies[dep]))
-				: [];
-			return deps.concat(devDeps);
-		} else {
-			return [];
-		}
-	}
-
-	private pathExists(p: string): boolean {
-		try {
-			fs.accessSync(p);
-		} catch {
-			return false;
-		}
-
-		return true;
-	}
+export class GitBranch extends vscode.TreeItem {
+    constructor(
+        public readonly label: string,
+        public readonly isCurrent: boolean = false
+    ) {
+        super(label, vscode.TreeItemCollapsibleState.None);
+        this.tooltip = this.label;
+        this.description = isCurrent ? 'current' : '';
+        this.iconPath = new vscode.ThemeIcon(isCurrent ? 'git-branch' : 'circle-outline');
+        this.contextValue = 'gitBranch';
+    }
 }
 
-export class Dependency extends vscode.TreeItem {
+export class GitBranchProvider implements vscode.TreeDataProvider<GitBranch> {
+    private _onDidChangeTreeData: vscode.EventEmitter<GitBranch | undefined | void> = new vscode.EventEmitter<GitBranch | undefined | void>();
+    readonly onDidChangeTreeData: vscode.Event<GitBranch | undefined | void> = this._onDidChangeTreeData.event;
 
-	constructor(
-		extensionRoot: vscode.Uri,
-		public readonly label: string,
-		private readonly version: string,
-		public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-		public readonly command?: vscode.Command
-	) {
-		super(label, collapsibleState);
+    private gitApi: any;
+    private repoListenerDisposable: vscode.Disposable | undefined;
 
-		this.tooltip = `${this.label}-${this.version}`;
-		this.description = this.version;
+    // Fallback: first workspace folder -> else process.cwd() (covers `code .` w/ no folder registered, edge cases)
+    private workspaceRoot: string | undefined = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 
-		this.iconPath = {
-			light: vscode.Uri.joinPath(extensionRoot, 'resources', 'light', 'dependency.svg'),
-			dark: vscode.Uri.joinPath(extensionRoot, 'resources', 'dark', 'dependency.svg')
-		};
-	}
+    constructor() {
+        this.initGitApi();
+    }
 
-	contextValue = 'dependency';
+    private async initGitApi(): Promise<void> {
+        const gitExtension = vscode.extensions.getExtension('vscode.git');
+        if (!gitExtension) {
+            vscode.window.showErrorMessage('Git extension not found');
+            return;
+        }
+
+        const exports = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
+
+        this.gitApi = exports.getAPI(1);
+
+        if (this.gitApi.state !== 'initialized') {
+            await new Promise<void>((resolve) => {
+                const disposable = this.gitApi.onDidChangeState((state: string) => {
+                    if (state === 'initialized') {
+                        disposable.dispose();
+                        resolve();
+                    }
+                });
+            });
+        }
+
+        this.gitApi.onDidOpenRepository(() => this.refresh());
+        this.gitApi.onDidCloseRepository(() => this.refresh());
+
+        this.attachRepoListener();
+        this.refresh();
+    }
+
+    private attachRepoListener(): void {
+        const repo = this.getActiveRepo();
+        if (!repo) return;
+
+        this.repoListenerDisposable?.dispose();
+        this.repoListenerDisposable = repo.state.onDidChange(() => this.refresh());
+    }
+
+    // Prefer a repo matching workspaceRoot if we can find one, else just take the first
+    private getActiveRepo(): any {
+        if (!this.gitApi?.repositories?.length) return undefined;
+
+        if (this.workspaceRoot) {
+            const match = this.gitApi.repositories.find((r: any) => path.resolve(r.rootUri.fsPath) === path.resolve(this.workspaceRoot!));
+            if (match) return match;
+        }
+
+        return this.gitApi.repositories[0];
+    }
+
+    refresh(): void {
+        this.attachRepoListener();
+        this._onDidChangeTreeData.fire();
+    }
+
+    getTreeItem(element: GitBranch): vscode.TreeItem {
+        return element;
+    }
+
+    async getChildren(element?: GitBranch): Promise<GitBranch[]> {
+        if (element) return [];
+        if (!this.gitApi) return [];
+
+        const repo = this.getActiveRepo();
+        if (!repo) {
+            vscode.window.showInformationMessage('No git repository found');
+            return [];
+        }
+
+        const currentBranchName = repo.state.HEAD?.name;
+        const refs = await repo.getRefs({ pattern: 'refs/heads/**' });
+
+        return refs
+            .map((ref: any) => ref.name)
+            .filter((name: string | undefined): name is string => !!name)
+            .sort((a: string, b: string) => a.localeCompare(b))
+            .map((name: string) => new GitBranch(name, name === currentBranchName));
+    }
 }
