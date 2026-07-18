@@ -19,6 +19,8 @@
 - [ ] See git diff of all the files
 - [ ] Mark files as reviewed
 - [ ] Mark diff as reviewed
+- [ ] Add tests
+- [ ] Add linter
 
 ## To Improve
 

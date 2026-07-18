@@ -12,33 +12,35 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "local-pr-reviewer.helloWorld",
-        "title": "Hello World"
-      }
-    ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "local-pr-reviewer",
+          "id": "local-reviewer",
           "title": "Local Reviewer",
           "icon": "resources/temp-icon.svg"
         }
       ]
     },
     "views": {
-      "local-pr-reviewer": [
+      "local-reviewer": [
         {
-          "id": "local-pr-reviewer-deps",
-          "name": "Dependencies"
-        },
-        {
-          "id": "local-pr-reviewer-outline",
-          "name": "Outline"
+          "id": "localReviewerBranches",
+          "name": "Branches",
+          "icon": "resources/temp-icon.svg",
+          "contextualTitle": "Local Reviewer"
         }
       ]
-    }
+    },
+    "commands": [
+      {
+        "command": "localReviewerBranches.refreshBranches",
+        "title": "Local Reviewer: Refresh",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+					"dark": "resources/dark/refresh.svg"
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
