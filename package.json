@@ -1,7 +1,8 @@
 {
-  "name": "local-pr-reviewer",
-  "displayName": "local-pr-reviewer",
-  "description": "TODO-DESCRIPTION",
+  "name": "localBranchReviewer",
+  "displayName": "Branch Reviewer",
+  "publisher": "Serious-Fin",
+  "description": "AI assisted local GIT branch review extension",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.125.0"
@@ -15,31 +16,38 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "local-reviewer",
-          "title": "Local Reviewer",
-          "icon": "resources/temp-icon.svg"
+          "id": "branchReviewer",
+          "title": "Branch Reviewer",
+          "icon": "resources/view-container-icon.svg"
         }
       ]
     },
     "views": {
-      "local-reviewer": [
+      "branchReviewer": [
         {
-          "id": "localReviewerBranches",
-          "name": "Branches",
-          "icon": "resources/temp-icon.svg",
-          "contextualTitle": "Local Reviewer"
-        },
-        { "id": "changedFilesView", "name": "Changed Files" }
+          "id": "baseBranchSelection",
+          "name": "Base Branch Selection",
+          "icon": "resources/view-container-icon.svg",
+          "contextualTitle": "Base Branch Selection"
+        }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "baseBranchSelection",
+        "contents": "Open a git repository to get started.\n[Open Folder](command:vscode.openFolder)",
+        "when": "config.git.enabled && git.state == initialized && workbenchState == empty"
+      },
+      {
+        "view": "baseBranchSelection",
+        "contents": "Select a base branch to compare the currently checked out branch to\n[Select Base Branch](command:localBranchReviewer.selectBaseBranch)",
+        "when": "workbenchState != empty && !localBranchReviewer.baseBranchSelected"
+      }
+    ],
     "commands": [
       {
-        "command": "localReviewerBranches.refreshBranches",
-        "title": "Local Reviewer: Refresh",
-        "icon": {
-          "light": "resources/light/refresh.svg",
-					"dark": "resources/dark/refresh.svg"
-        }
+        "command": "localBranchReviewer.selectBaseBranch",
+        "title": "Branch Reviewer: Select Base Branch"
       }
     ]
   },
